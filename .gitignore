@@ -1,0 +1,7 @@
+node_modules/
+dist/
+app/vendor/
+*.xlsx
+.DS_Store
+# 旧版本的副本，不上传
+app/index (2).html

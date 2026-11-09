@@ -1,0 +1,44 @@
+# 每次推送到 main 分支，自动把 app/index.html 发布成网页（GitHub Pages）
+name: 发布网页版
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: 准备网页文件
+        run: |
+          mkdir -p site/vendor
+          cp app/index.html site/index.html
+          # Excel 组件和网页放在一起；下载失败时网页会自动改从 CDN 加载
+          if ! curl -fsSL --retry 3 -o site/vendor/xlsx.full.min.js https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js; then
+            rm -f site/vendor/xlsx.full.min.js
+            echo "::warning::没能下载 Excel 组件，网页打开时会改从 CDN 加载"
+          fi
+
+      - uses: actions/configure-pages@v6
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+      - id: deployment
+        uses: actions/deploy-pages@v5

@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>两地账本</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Sora:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#EEF1EF; --surface:#FFFFFF; --sunk:#E4E9E6; --ink:#17201E; --muted:#5D6A65; --line:#D6DDDA;
+  --my:#11707E; --my-soft:#DCEEF0; --cn:#B0582A; --cn-soft:#F5E6DC;
+  --gain:#23885A; --loss:#C23B3B; --focus:#11707E;
+  --num:"Sora","Noto Sans SC",system-ui,sans-serif;
+  --txt:"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  color-scheme:light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#111715; --surface:#19211F; --sunk:#0D1311; --ink:#E5ECE9; --muted:#93A19C; --line:#2A3532;
+    --my:#56B6C4; --my-soft:#17343A; --cn:#E4935F; --cn-soft:#3A2619;
+    --gain:#5CC78F; --loss:#F07070; --focus:#56B6C4; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#111715; --surface:#19211F; --sunk:#0D1311; --ink:#E5ECE9; --muted:#93A19C; --line:#2A3532;
+  --my:#56B6C4; --my-soft:#17343A; --cn:#E4935F; --cn-soft:#3A2619;
+  --gain:#5CC78F; --loss:#F07070; --focus:#56B6C4; color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;min-height:100%;background:var(--paper);color:var(--ink);font-family:var(--txt);font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.num{font-family:var(--num);font-variant-numeric:tabular-nums}
+.gain{color:var(--gain)} .loss{color:var(--loss)}
+
+/* layout */
+.app{display:grid;grid-template-columns:208px 1fr;min-height:100vh}
+nav.side{border-right:1px solid var(--line);padding:28px 14px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:4px}
+.brand{font-weight:700;font-size:18px;padding:0 10px 22px;letter-spacing:.02em}
+.brand small{display:block;font-weight:400;font-size:12px;color:var(--muted)}
+.navbtn{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;border:0;background:none;text-align:left;cursor:pointer;color:var(--muted)}
+.navbtn:hover{background:var(--sunk);color:var(--ink)}
+.navbtn[aria-current="page"]{background:var(--surface);color:var(--ink);font-weight:500;box-shadow:0 0 0 1px var(--line)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none}
+.dot.my{background:var(--my)} .dot.cn{background:var(--cn)}
+.side .status{margin-top:auto;font-size:12px;color:var(--muted);padding:0 10px}
+main{padding:36px clamp(16px,4vw,48px) 80px;max-width:1080px;width:100%}
+h1{font-size:24px;margin:0 0 4px;font-weight:700}
+.sub{color:var(--muted);margin:0 0 24px}
+h2{font-size:16px;margin:32px 0 12px;font-weight:500}
+
+/* hero */
+.hero{padding:8px 0 8px}
+.hero .label{color:var(--muted);font-size:14px}
+.hero .big{font-family:var(--num);font-weight:700;font-size:clamp(44px,8vw,76px);line-height:1.05;letter-spacing:-.02em;margin:4px 0 20px}
+.route{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:16px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 20px}
+.route .end{min-width:120px}
+.route .end.right{text-align:right}
+.route .place{font-size:13px;color:var(--muted)}
+.route .val{font-family:var(--num);font-weight:600;font-size:20px}
+.route svg{width:100%;height:44px;overflow:visible}
+.route .path{fill:none;stroke:var(--line);stroke-width:2;stroke-dasharray:4 6}
+.route .trace{fill:none;stroke-width:2.5;stroke-linecap:round}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-top:12px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.stat .k{font-size:13px;color:var(--muted)}
+.stat .v{font-family:var(--num);font-size:20px;font-weight:600}
+
+/* chart */
+.chart{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;overflow-x:auto}
+.chart svg{display:block;min-width:520px;width:100%;height:200px}
+.chart text{font-size:11px;fill:var(--muted);font-family:var(--num)}
+
+/* tables */
+.tablewrap{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:560px}
+th,td{padding:11px 14px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-weight:500;font-size:13px;color:var(--muted);background:var(--surface)}
+td.r,th.r{text-align:right}
+tbody tr:last-child td{border-bottom:0}
+tr.clickable{cursor:pointer}
+tr.clickable:hover td{background:var(--sunk)}
+tr.fresh td{animation:flash 1.4s ease-out}
+@keyframes flash{from{background:var(--my-soft)}to{background:transparent}}
+.tag{display:inline-block;font-size:12px;padding:1px 8px;border-radius:99px}
+.tag.buy{background:var(--sunk);color:var(--muted)}
+.tag.sell.my{background:var(--my-soft);color:var(--my)}
+.tag.sell.cn{background:var(--cn-soft);color:var(--cn)}
+.detail td{background:var(--sunk);white-space:normal}
+.detail .inner{animation:open .25s ease-out}
+@keyframes open{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.mini{width:100%;min-width:0}
+.mini td,.mini th{padding:6px 8px;border-color:var(--line);font-size:13px}
+.empty{padding:36px 20px;text-align:center;color:var(--muted)}
+
+/* buttons */
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:18px}
+.btn{border:1px solid var(--line);background:var(--surface);padding:8px 16px;border-radius:9px;cursor:pointer;font-weight:500;transition:transform .12s, background .12s}
+.btn:hover{background:var(--sunk)}
+.btn:active{transform:scale(.97)}
+.btn.primary{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.btn.primary:hover{opacity:.9}
+.btn.my{background:var(--my);border-color:var(--my);color:#fff}
+.btn.cn{background:var(--cn);border-color:var(--cn);color:#fff}
+.btn.small{padding:4px 10px;font-size:13px}
+.btn.danger{color:var(--loss)}
+.btn.danger.armed{background:var(--loss);color:#fff;border-color:var(--loss)}
+.seg{display:inline-flex;background:var(--sunk);border-radius:9px;padding:3px}
+.seg button{border:0;background:none;padding:5px 12px;border-radius:7px;cursor:pointer;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+
+/* modal */
+.scrim{position:fixed;inset:0;background:rgba(10,15,13,.42);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
+.scrim.on{display:flex;animation:fade .18s ease-out}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+.sheet{background:var(--surface);border-radius:16px;width:min(460px,100%);max-height:calc(100vh - 32px);overflow:auto;padding:24px;animation:rise .24s cubic-bezier(.2,.8,.2,1)}
+@keyframes rise{from{transform:translateY(16px);opacity:0}to{transform:none;opacity:1}}
+.sheet h3{margin:0 0 4px;font-size:18px}
+.sheet .hint{color:var(--muted);font-size:13px;margin:0 0 18px}
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.field label{font-size:13px;color:var(--muted)}
+.field input,.field select{border:1px solid var(--line);background:var(--paper);border-radius:9px;padding:9px 12px;width:100%}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.unit{position:relative}
+.unit input{padding-right:52px}
+.unit span{position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px}
+.preview{background:var(--sunk);border-radius:10px;padding:12px 14px;margin:4px 0 18px;font-size:14px}
+.preview .pv{font-family:var(--num);font-weight:600;font-size:18px}
+.err{color:var(--loss);font-size:13px;min-height:20px;margin-top:-6px}
+.actions{display:flex;justify-content:flex-end;gap:10px}
+
+/* toast */
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);opacity:0;background:var(--ink);color:var(--paper);padding:10px 18px;border-radius:99px;font-size:14px;transition:all .3s cubic-bezier(.2,.8,.2,1);z-index:60;pointer-events:none;white-space:nowrap}
+.toast.on{transform:translate(-50%,0);opacity:1}
+
+.prefs .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:12px}
+.prefs .card p{margin:0 0 12px;color:var(--muted);font-size:14px}
+
+/* mobile */
+@media (max-width:760px){
+  .app{grid-template-columns:1fr}
+  nav.side{position:fixed;top:auto;bottom:0;left:0;right:0;height:auto;flex-direction:row;justify-content:space-around;padding:6px 4px calc(6px + env(safe-area-inset-bottom,0px));border-right:0;border-top:1px solid var(--line);background:var(--surface);z-index:40}
+  .brand,.side .status{display:none}
+  .navbtn{flex-direction:column;gap:2px;font-size:11px;padding:6px 8px}
+  .navbtn[aria-current="page"]{box-shadow:none;background:var(--sunk)}
+  main{padding-bottom:110px}
+  .route{grid-template-columns:1fr 1fr}
+  .route svg{grid-column:1/-1;grid-row:2}
+  .route .end{min-width:0}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+}
+
+/* projects */
+.toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:18px}
+.search{flex:1;min-width:180px;max-width:320px;border:1px solid var(--line);background:var(--surface);border-radius:9px;padding:8px 12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.pcard{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;cursor:pointer;text-align:left;width:100%;transition:transform .15s, box-shadow .15s}
+.pcard:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(0,0,0,.07)}
+.pcard.fresh{animation:pop .5s cubic-bezier(.2,.8,.2,1)}
+@keyframes pop{0%{transform:scale(.96)}60%{transform:scale(1.02)}100%{transform:none}}
+.pcard .top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.pcard .name{font-weight:700;font-size:16px;line-height:1.35;word-break:break-all}
+.chip{font-size:12px;padding:1px 8px;border-radius:99px;background:var(--sunk);color:var(--muted);white-space:nowrap}
+.chip.live{background:var(--my-soft);color:var(--my)}
+.meter{height:6px;border-radius:99px;background:var(--sunk);margin:14px 0 6px;overflow:hidden}
+.meter i{display:block;height:100%;border-radius:99px;background:var(--ink);transition:width .6s cubic-bezier(.2,.8,.2,1)}
+.meterlabel{font-size:12px;color:var(--muted)}
+.trio{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:12px}
+.trio .k{font-size:12px;color:var(--muted)}
+.trio .v{font-family:var(--num);font-weight:600;font-size:14px}
+.back{border:0;background:none;color:var(--muted);cursor:pointer;padding:0;margin-bottom:12px}
+.back:hover{color:var(--ink)}
+.phead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.flow{display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:stretch;margin:18px 0 8px}
+.flow .side{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px}
+.flow .side .k{font-size:13px;color:var(--muted)}
+.flow .side .v{font-family:var(--num);font-weight:700;font-size:24px}
+.flow .side .s{font-size:13px;color:var(--muted)}
+.flow .mid{display:flex;flex-direction:column;justify-content:center;align-items:center;min-width:120px;text-align:center}
+.flow .mid .k{font-size:13px;color:var(--muted)}
+.flow .mid .v{font-family:var(--num);font-weight:700;font-size:22px}
+.flow .arrow{width:100%;height:10px}
+.timeline{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.tl{display:grid;grid-template-columns:92px 54px 1fr auto auto;gap:12px;align-items:center;padding:11px 14px;border-bottom:1px solid var(--line)}
+.tl:last-child{border-bottom:0}
+.tl.fresh{animation:flash 1.4s ease-out}
+.tl .meta{display:contents}
+.tl .when{font-family:var(--num);font-size:13px;color:var(--muted)}
+.tl .what{font-family:var(--num)}
+.tl .what small{color:var(--muted);font-family:var(--txt)}
+.tl .res{font-family:var(--num);text-align:right;min-width:90px}
+.kind{font-size:12px;padding:1px 0;border-radius:99px;text-align:center}
+.kind.buy{border:1px solid var(--line);color:var(--muted)}
+.kind.sell{background:var(--ink);color:var(--paper)}
+.cur{font-size:11px;padding:0 6px;border-radius:5px;margin-left:4px;font-family:var(--num)}
+.cur.RMB{background:var(--cn-soft);color:var(--cn)} .cur.RM{background:var(--my-soft);color:var(--my)}
+.seg.cur2 button[aria-pressed="true"][data-cur="RMB"]{color:var(--cn)}
+.seg.cur2 button[aria-pressed="true"][data-cur="RM"]{color:var(--my)}
+@media (max-width:760px){
+  .flow{grid-template-columns:1fr 1fr}
+  .flow .mid{grid-column:1/-1;grid-row:1;flex-direction:row;gap:10px;justify-content:flex-start}
+  .flow .arrow{display:none}
+  .tl{grid-template-columns:1fr auto;grid-template-areas:"what res" "meta act"}
+  .tl .what{grid-area:what} .tl .res{grid-area:res}
+  .tl .meta{grid-area:meta;display:flex;gap:8px;align-items:center} .tl .act{grid-area:act}
+}
+.chk{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--muted);cursor:pointer;margin-left:8px}
+.chk input{margin:0}
+.fxnote{font-size:12px;color:var(--muted);margin-top:2px}
+.field input:disabled{opacity:.75;cursor:not-allowed}
+.rateline{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px;overflow-x:auto}
+.rateline svg{display:block;width:100%;min-width:480px;height:180px}
+.rateline text{font-size:11px;fill:var(--muted);font-family:var(--num)}
+.spin{display:inline-block;width:12px;height:12px;border:2px solid var(--line);border-top-color:var(--ink);border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="side" aria-label="页面">
+    <div class="brand">两地账本<small>中国 与 马来西亚</small></div>
+    <button class="navbtn" data-view="overview"><span class="dot"></span>总览</button>
+    <button class="navbtn" data-view="projects"><span class="dot my"></span>项目</button>
+    <button class="navbtn" data-view="records"><span class="dot cn"></span>全部记录</button>
+    <button class="navbtn" data-view="rates"><span class="dot"></span>汇率</button>
+    <button class="navbtn" data-view="prefs"><span class="dot"></span>备份与设置</button>
+    <div class="status" id="status">正在载入…</div>
+  </nav>
+  <main id="main"></main>
+</div>
+
+<div class="scrim" id="scrim" role="dialog" aria-modal="true"><div class="sheet" id="sheet"></div></div>
+<div class="toast" id="toast" role="status"></div>
+
+<script src="vendor/xlsx.full.min.js"></script>
+<script>if(!window.XLSX){document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"><\/script>');}</script>
+<script>
+/* ---------- basics ---------- */
+const LS_KEY = "liangdi-ledger-v1";
+const VIEWS = ["overview","projects","records","rates","prefs"];
+const OLD_SECTIONS = { MY:{buy:"RMB",sell:"RM"}, CN:{buy:"RM",sell:"RMB"} };
+
+let state = { products:[], purchases:[], sales:[], settings:{ fx:0.62 }, rates:{}, ratesMeta:{ updated:0 } };
+let store = { mode:"local", base:null };
+let ui = { view:"overview", project:null, recFilter:"all", search:"", fresh:null, rateStatus:"", rateAll:false };
+
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36)+Math.random().toString(36).slice(2));
+const today = () => { const d=new Date(); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10); };
+const r2 = x => Math.round(x*100)/100;
+const fmt = x => Math.abs(r2(x)).toLocaleString("zh-CN",{minimumFractionDigits:2,maximumFractionDigits:2});
+const money = (x,cur) => (x<-0.004?"−":"") + (cur==="RMB" ? "¥" : "RM ") + fmt(x);
+const rmb = x => money(x,"RMB");
+const sign = x => x>0.004 ? "gain" : x<-0.004 ? "loss" : "";
+const esc = s => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const toRMB = (amt,cur,fx) => cur==="RMB" ? amt : amt/fx;
+const prodById = id => state.products.find(p=>p.id===id);
+const order = (a,b) => (a.date<b.date?-1:a.date>b.date?1:(a.createdAt||0)-(b.createdAt||0));
+const curTag = c => `<span class="cur ${c}">${c}</span>`;
+
+/* ---------- exchange rates: 1 RMB = ? RM, one entry per business day ---------- */
+let rateKeys = [];
+function indexRates(){ rateKeys = Object.keys(state.rates||{}).sort(); }
+function rateFor(date){
+  if(!rateKeys.length || !date) return null;
+  if(state.rates[date]) return state.rates[date];
+  let lo=0, hi=rateKeys.length-1, best=-1;
+  while(lo<=hi){ const mid=(lo+hi)>>1; if(rateKeys[mid]<=date){ best=mid; lo=mid+1; } else hi=mid-1; }
+  return best>=0 ? state.rates[rateKeys[best]] : null;
+}
+const fxOf = o => (o.fxMode==="manual" ? o.fx : (rateFor(o.date) || o.fx));
+const fxSrc = o => (o.fxMode==="manual" ? "手动" : rateFor(o.date) ? "自动（当天汇率）" : "自动（暂无数据，用记账时汇率）");
+function addDays(d, n){ const x=new Date(d+"T00:00:00Z"); x.setUTCDate(x.getUTCDate()+n); return x.toISOString().slice(0,10); }
+async function fetchJson(url){
+  const ctl = new AbortController(); const tm = setTimeout(()=>ctl.abort(), 12000);
+  try{ const r = await fetch(url, { signal:ctl.signal }); if(!r.ok) throw new Error(r.status); return await r.json(); }
+  finally{ clearTimeout(tm); }
+}
+let rateBusy = false, rateChanged = false;
+async function updateRates(manual){
+  if(rateBusy) return; rateBusy = true; ui.rateStatus = "updating"; if(ui.view==="rates") render();
+  try{
+    const dates = state.purchases.concat(state.sales).map(o=>o.date).filter(Boolean).sort();
+    let start = dates.length ? addDays(dates[0], -7) : addDays(today(), -90);
+    if(start > addDays(today(), -90)) start = addDays(today(), -90);
+    let from = start;
+    if(rateKeys.length && rateKeys[0] <= addDays(start, 7)) from = addDays(rateKeys[rateKeys.length-1], -5);
+    let j = null;
+    try{ j = await fetchJson(`https://api.frankfurter.app/${from}..?from=CNY&to=MYR`); }
+    catch(e){ j = await fetchJson(`https://api.frankfurter.dev/v1/${from}..?base=CNY&symbols=MYR`); }
+    let n = 0;
+    for(const [d, v] of Object.entries(j.rates||{})){ const x = v && v.MYR; if(x>0){ if(state.rates[d]!==x) n++; state.rates[d] = x; } }
+    rateChanged = n>0;
+    indexRates();
+    state.ratesMeta = { updated: Date.now() };
+    await putRates();
+    ui.rateStatus = "ok";
+    if(manual) toast(n ? `汇率已更新，新增 ${n} 天` : "汇率已经是最新的");
+  }catch(e){
+    ui.rateStatus = "fail";
+    if(manual) toast("没能连上汇率服务器，请检查网络");
+  }finally{ rateBusy = false; if(ui.view==="rates" || rateChanged) render(); rateChanged = false; }
+}
+
+/* fill currency on records saved by the earlier two-section version */
+function migrate(){
+  const changed = [];
+  for(const [kind, side] of [["purchases","buy"],["sales","sell"]]){
+    for(const o of state[kind]){
+      let ch = false;
+      if(!o.currency){ const p = prodById(o.productId); o.currency = (p && OLD_SECTIONS[p.section]) ? OLD_SECTIONS[p.section][side] : (side==="buy"?"RMB":"RM"); ch = true; }
+      if(!o.fxMode){ o.fxMode = "auto"; ch = true; }
+      if(ch) changed.push([kind,o]);
+    }
+  }
+  return changed;
+}
+
+/* ---------- storage ---------- */
+function saveLocal(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }catch(e){} scheduleAutoBackup(); }
+function loadLocal(){ try{ const s = JSON.parse(localStorage.getItem(LS_KEY)||"null"); if(s) state = Object.assign(state, s); }catch(e){} if(!state.rates) state.rates={}; if(!state.ratesMeta) state.ratesMeta={updated:0}; indexRates(); }
+async function connectDb(){
+  if(!window.claude || !window.claude.use) return false;
+  try{
+    const db = await window.claude.use("db"); if(!db) return false;
+    const user = await window.claude.use("user"); if(!user) return false;
+    const id = await user.id(); if(!id) return false;
+    const base = db.collection("data/users/"+id).doc("ledger");
+    const snaps = await Promise.all(["products","purchases","sales"].map(k=>base.collection(k).limit(1000).get()));
+    const m = await base.collection("meta").doc("settings").get();
+    const rd = await base.collection("meta").doc("rates").get();
+    if(rd.exists){ const x = rd.data(); state.rates = Object.assign({}, x.rates||{}, state.rates); state.ratesMeta = { updated: Math.max(x.updated||0, state.ratesMeta.updated||0) }; indexRates(); }
+    const remote = { products:snaps[0].docs.map(d=>d.data()), purchases:snaps[1].docs.map(d=>d.data()), sales:snaps[2].docs.map(d=>d.data()) };
+    store = { mode:"db", base };
+    const remoteEmpty = !remote.products.length && !remote.purchases.length && !remote.sales.length;
+    const localHas = state.products.length || state.purchases.length || state.sales.length;
+    if(remoteEmpty && localHas){
+      migrate();
+      for(const k of ["products","purchases","sales"]) for(const o of state[k]) await base.collection(k).doc(o.id).set(o);
+      await base.collection("meta").doc("settings").set(state.settings);
+      await base.collection("meta").doc("rates").set({ rates:state.rates, updated:state.ratesMeta.updated||0 });
+    } else {
+      state.products = remote.products.map(o=>({...o})); state.purchases = remote.purchases.map(o=>({...o})); state.sales = remote.sales.map(o=>({...o}));
+      if(m.exists) state.settings = Object.assign({fx:0.62}, m.data());
+      for(const [k,o] of migrate()) await base.collection(k).doc(o.id).set(o);
+    }
+    saveLocal();
+    return true;
+  }catch(e){ console.warn("db", e); store = { mode:"local", base:null }; return false; }
+}
+async function put(kind, obj){
+  const list = state[kind]; const i = list.findIndex(o=>o.id===obj.id);
+  if(i>=0) list[i]=obj; else list.push(obj);
+  saveLocal();
+  if(store.base){ try{ await store.base.collection(kind).doc(obj.id).set(obj); }catch(e){ toast("没能同步到账户，已先存在本机"); } }
+}
+async function del(kind, id){
+  state[kind] = state[kind].filter(o=>o.id!==id); saveLocal();
+  if(store.base){ try{ await store.base.collection(kind).doc(id).delete(); }catch(e){} }
+}
+async function putRates(){ saveLocal(); if(store.base){ try{ await store.base.collection("meta").doc("rates").set({ rates:state.rates, updated:state.ratesMeta.updated||0 }); }catch(e){} } }
+async function putSettings(){ saveLocal(); if(store.base){ try{ await store.base.collection("meta").doc("settings").set(state.settings); }catch(e){} } }
+function setStatus(){ document.getElementById("status").textContent = store.mode==="db" ? "已保存到你的 Claude 账户" : (window.desktop ? "保存在这台电脑上，并自动备份到「文档」" : "保存在这台电脑的浏览器里"); }
+
+/* ---------- FIFO engine (all in RMB) ---------- */
+function compute(){
+  const P = {}, S = {}, B = {};
+  for(const p of state.products){
+    const r = P[p.id] = { bought:0, buyCost:0, stock:0, stockCost:0, sold:0, revenue:0, cost:0, profit:0, last:p.createdAt||0, lastDate:"" };
+    const buys = state.purchases.filter(b=>b.productId===p.id).sort(order);
+    const batches = buys.map(b=>({ id:b.id, left:b.qty, unit: toRMB(b.price,b.currency,fxOf(b)) }));
+    for(const b of buys){ r.bought+=b.qty; r.buyCost+=toRMB(b.price*b.qty,b.currency,fxOf(b)); if(b.date>r.lastDate) r.lastDate=b.date; }
+    for(const s of state.sales.filter(s=>s.productId===p.id).sort(order)){
+      let need = s.qty, cost = 0; const alloc = [];
+      for(const bt of batches){ if(need<=0) break; const t=Math.min(need, bt.left); if(t>0){ bt.left-=t; need-=t; cost+=t*bt.unit; alloc.push({ purchaseId:bt.id, qty:t, unit:bt.unit }); } }
+      const revenue = toRMB(s.price*s.qty,s.currency,fxOf(s));
+      S[s.id] = { revenue, cost, profit: revenue-cost, short: need, alloc };
+      r.sold+=s.qty; r.revenue+=revenue; r.cost+=cost; r.profit+=revenue-cost;
+      if(s.date>r.lastDate) r.lastDate=s.date;
+    }
+    for(const bt of batches){ r.stock+=bt.left; r.stockCost+=bt.left*bt.unit; B[bt.id] = { left:bt.left, unit:bt.unit }; }
+  }
+  return { P, S, B };
+}
+function totals(c){
+  const t = { profit:0, revenue:0, stockCost:0, month:0, live:0, MY:0, CN:0 };
+  const m = today().slice(0,7);
+  for(const p of state.products){ const r=c.P[p.id]; t.profit+=r.profit; t.revenue+=r.revenue; t.stockCost+=r.stockCost; if(r.stock>0) t.live++; }
+  for(const s of state.sales){ const x=c.S[s.id]; if(!x) continue; if(s.currency==="RM") t.MY+=x.profit; else t.CN+=x.profit; if(s.date.slice(0,7)===m) t.month+=x.profit; }
+  return t;
+}
+function allRecords(){
+  return state.purchases.map(o=>({kind:"purchases",o})).concat(state.sales.map(o=>({kind:"sales",o}))).sort((a,b)=>-order(a.o,b.o));
+}
+
+/* ---------- views ---------- */
+const main = document.getElementById("main");
+function go(view, project){
+  ui.view = view; ui.project = project||null;
+  if(location.hash.slice(1)!==view) history.replaceState(null,"","#"+view);
+  render(true); window.scrollTo(0,0);
+}
+function render(entering){
+  document.querySelectorAll(".navbtn").forEach(b=>b.setAttribute("aria-current", b.dataset.view===ui.view?"page":"false"));
+  const c = compute();
+  if(ui.view==="overview") main.innerHTML = viewOverview(c);
+  else if(ui.view==="projects") main.innerHTML = ui.project && prodById(ui.project) ? viewProject(prodById(ui.project), c) : viewProjects(c);
+  else if(ui.view==="records") main.innerHTML = viewRecords(c);
+  else if(ui.view==="rates") main.innerHTML = viewRates();
+  else main.innerHTML = viewPrefs();
+  if(ui.view==="overview" && entering) playHero();
+  ui.fresh = null;
+}
+
+function viewOverview(c){
+  const t = totals(c);
+  return `
+  <section class="hero">
+    <div class="label">历史累计利润（统一按人民币）</div>
+    <div class="big num ${sign(t.profit)}" id="heroNum" data-to="${t.profit}">${rmb(t.profit)}</div>
+    <div class="route">
+      <div class="end"><div class="place">中国卖出（RMB）</div><div class="val ${sign(t.CN)}">${rmb(t.CN)}</div></div>
+      <svg viewBox="0 0 300 44" preserveAspectRatio="none" aria-hidden="true">
+        <path class="path" d="M4 30 C 90 -6, 210 -6, 296 30"/>
+        <path class="trace" id="trace" d="M4 30 C 90 -6, 210 -6, 296 30" stroke="url(#g)"/>
+        <defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="var(--cn)"/><stop offset="1" stop-color="var(--my)"/></linearGradient></defs>
+        <circle r="4" cx="4" cy="30" fill="var(--cn)"/><circle r="4" cx="296" cy="30" fill="var(--my)"/>
+        <circle r="3.5" id="runner" fill="var(--ink)" opacity="0"/>
+      </svg>
+      <div class="end right"><div class="place">马来西亚卖出（RM）</div><div class="val ${sign(t.MY)}">${rmb(t.MY)}</div></div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="k">本月利润</div><div class="v ${sign(t.month)}">${rmb(t.month)}</div></div>
+      <div class="stat"><div class="k">累计卖出收入</div><div class="v">${rmb(t.revenue)}</div></div>
+      <div class="stat"><div class="k">利润率</div><div class="v ${sign(t.profit)}">${t.revenue?(Math.round(t.profit/t.revenue*1000)/10).toFixed(1)+"%":"—"}</div></div>
+      <div class="stat"><div class="k">还没卖的货（成本）</div><div class="v">${rmb(t.stockCost)}</div></div>
+      <div class="stat"><div class="k">在库项目</div><div class="v">${t.live}</div></div>
+    </div>
+  </section>
+  <div class="bar" style="margin-top:20px"><button class="btn primary" data-act="newproj">新建项目</button></div>
+  <h2>最近 12 个月利润</h2>
+  <div class="chart">${monthChart(c)}</div>
+  <h2>最近记录</h2>
+  ${recordTable(c, allRecords().slice(0,8), false)}`;
+}
+
+function monthChart(c){
+  const months=[]; const d=new Date(); d.setDate(1);
+  for(let i=11;i>=0;i--){ const x=new Date(d.getFullYear(), d.getMonth()-i, 1); months.push(x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")); }
+  const data = months.map(m=>{ const v={MY:0,CN:0}; for(const s of state.sales){ if(s.date.slice(0,7)===m&&c.S[s.id]) v[s.currency==="RM"?"MY":"CN"]+=c.S[s.id].profit; } return v; });
+  const tot = data.map(v=>v.MY+v.CN);
+  const max = Math.max(1, ...tot.map(Math.abs), ...data.map(v=>Math.abs(v.MY)+Math.abs(v.CN)));
+  const W=600,H=200,top=18,bot=28, neg = data.some(v=>v.MY<0||v.CN<0), zero = neg ? (H-bot+top)/2 : H-bot, scale=(zero-top)/max;
+  const bw = W/12;
+  let g = `<line x1="0" x2="${W}" y1="${zero}" y2="${zero}" stroke="var(--line)"/>`;
+  months.forEach((m,i)=>{
+    const x=i*bw+bw*0.22, w=bw*0.56; let up=zero, dn=zero;
+    for(const k of ["CN","MY"]){ const v=data[i][k]; if(!v) continue; const h=Math.abs(v)*scale;
+      const ry = v>=0 ? up-h : dn; g+=`<rect x="${x}" y="${ry}" width="${w}" height="${Math.max(h,0.5)}" rx="2" fill="var(--${k==="MY"?"my":"cn"})"><title>${m} ${k==="MY"?"马来西亚卖出":"中国卖出"} ${rmb(v)}</title></rect>`;
+      if(v>=0) up-=h; else dn+=h; }
+    g+=`<text x="${i*bw+bw/2}" y="${H-8}" text-anchor="middle">${Number(m.slice(5))}月</text>`;
+    if(tot[i]) g+=`<text x="${i*bw+bw/2}" y="${tot[i]>=0? up-5 : dn+12}" text-anchor="middle" style="fill:var(--ink)">${Math.round(tot[i])}</text>`;
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="每月利润柱状图，单位人民币">${g}</svg>
+    <div style="font-size:12px;color:var(--muted);margin-top:6px"><span class="dot cn" style="display:inline-block"></span> 中国卖出 &nbsp; <span class="dot my" style="display:inline-block"></span> 马来西亚卖出 &nbsp; 单位：元（RMB）</div>`;
+}
+
+function viewProjects(c){
+  const q = ui.search.trim().toLowerCase();
+  const prods = state.products.filter(p=>!q || p.name.toLowerCase().includes(q))
+    .sort((a,b)=>(c.P[b.id].stock>0)-(c.P[a.id].stock>0) || (c.P[b.id].lastDate>c.P[a.id].lastDate?1:c.P[b.id].lastDate<c.P[a.id].lastDate?-1:0) || (b.createdAt||0)-(a.createdAt||0));
+  const cards = prods.map(p=>{
+    const r = c.P[p.id], pct = r.bought ? Math.round(r.sold/r.bought*100) : 0;
+    return `<button class="pcard${ui.fresh===p.id?" fresh":""}" data-open="${p.id}">
+      <div class="top"><div class="name">${esc(p.name)}</div>${r.stock>0?`<span class="chip live">在库 ${r.stock} 件</span>`:`<span class="chip">已卖完</span>`}</div>
+      <div class="meter"><i style="width:${pct}%"></i></div>
+      <div class="meterlabel">已卖 ${r.sold} / 共买 ${r.bought} 件</div>
+      <div class="trio"><div><div class="k">买入</div><div class="v">${rmb(r.buyCost)}</div></div>
+        <div><div class="k">卖出</div><div class="v">${rmb(r.revenue)}</div></div>
+        <div><div class="k">利润</div><div class="v ${sign(r.profit)}">${r.sold?rmb(r.profit):"—"}</div></div></div>
+    </button>`;
+  }).join("");
+  return `<h1>项目</h1><p class="sub">每个项目是一款商品。先记买入，卖出后利润会自动算进总账。</p>
+    <div class="toolbar"><button class="btn primary" data-act="newproj">新建项目</button>
+      ${state.products.length?`<input class="search" id="search" type="search" placeholder="搜索项目" value="${esc(ui.search)}">`:""}</div>
+    ${prods.length?`<div class="grid">${cards}</div>`:`<div class="tablewrap"><div class="empty">${q?"没有找到这个项目。":"还没有项目。点「新建项目」，填上第一笔买入，比如一个 PS5 手柄。"}</div></div>`}`;
+}
+
+function viewProject(p, c){
+  const r = c.P[p.id];
+  const recs = allRecords().filter(x=>x.o.productId===p.id);
+  const buyCurs = [...new Set(state.purchases.filter(b=>b.productId===p.id).map(b=>b.currency))];
+  const sellCurs = [...new Set(state.sales.filter(s=>s.productId===p.id).map(s=>s.currency))];
+  const rows = recs.map(x=>{
+    const isS = x.kind==="sales", o=x.o, tot=toRMB(o.price*o.qty,o.currency,fxOf(o));
+    return `<div class="tl${ui.fresh===o.id?" fresh":""}">
+      <div class="meta"><span class="when">${o.date}</span><span class="kind ${isS?"sell":"buy"}">${isS?"卖出":"买入"}</span></div>
+      <div class="what">${o.qty} × ${money(o.price,o.currency)}${curTag(o.currency)}${o.currency==="RMB"?"":` <small>≈ ${rmb(tot)}</small>`}</div>
+      <div class="res ${isS?sign(c.S[o.id].profit):""}">${isS?(c.S[o.id].profit>=0?"赚 ":"亏 ")+rmb(Math.abs(c.S[o.id].profit)):`<span style="color:var(--muted)">${rmb(tot)}</span>`}</div>
+      <div class="act"><button class="btn small" data-edit="${x.kind}:${o.id}">修改</button></div></div>`;
+  }).join("");
+  const waiting = r.sold===0;
+  return `<button class="back" data-view="projects">← 全部项目</button>
+    <div class="phead"><div><h1>${esc(p.name)}</h1><p class="sub" style="margin:0">${r.stock>0?`还有 ${r.stock} 件在库`:"已经全部卖完"}</p></div>
+      <div class="bar" style="margin:0">
+        <button class="btn" data-act="buy" data-pid="${p.id}">再买入</button>
+        <button class="btn primary" data-act="sell" data-pid="${p.id}" ${r.stock>0?"":"disabled"}>记一笔卖出</button></div></div>
+    <div class="flow">
+      <div class="side"><div class="k">买入 ${r.bought} 件 ${buyCurs.map(curTag).join("")}</div><div class="v">${rmb(r.buyCost)}</div><div class="s">还没卖的成本 ${rmb(r.stockCost)}</div></div>
+      <div class="mid">${waiting?`<div class="k">等待卖出</div><div class="v" style="color:var(--muted)">—</div>`:`<div class="k">利润</div><div class="v ${sign(r.profit)}">${rmb(r.profit)}</div><div class="k">${r.revenue?`利润率 ${Math.round(r.profit/r.revenue*100)}%`:""}</div>`}
+        <svg class="arrow" viewBox="0 0 120 10" preserveAspectRatio="none" aria-hidden="true"><path d="M2 5 H112 M106 1 L113 5 L106 9" fill="none" stroke="var(--line)" stroke-width="1.5"/></svg></div>
+      <div class="side"><div class="k">卖出 ${r.sold} 件 ${sellCurs.map(curTag).join("")}</div><div class="v">${rmb(r.revenue)}</div><div class="s">${r.sold?`对应成本 ${rmb(r.cost)}`:"还没有卖出"}</div></div>
+    </div>
+    <h2>买卖记录</h2>
+    <div class="timeline">${rows}</div>
+    <div class="bar" style="margin-top:24px"><button class="btn small" data-rename="${p.id}">改名</button><button class="btn small danger" data-delprod="${p.id}">删除项目</button></div>`;
+}
+
+function recordTable(c, recs, withActions){
+  if(!recs.length) return `<div class="tablewrap"><div class="empty">还没有记录。去「项目」新建第一个吧。</div></div>`;
+  const rows = recs.map(x=>{
+    const p = prodById(x.o.productId); if(!p) return "";
+    const isS=x.kind==="sales", o=x.o;
+    return `<tr class="clickable${ui.fresh===o.id?" fresh":""}" data-open="${p.id}"><td class="num">${o.date}</td>
+      <td><span class="tag ${isS?"sell "+(o.currency==="RM"?"my":"cn"):"buy"}">${isS?"卖出":"买入"}</span></td>
+      <td>${esc(p.name)}</td>
+      <td class="r num">${o.qty} × ${money(o.price,o.currency)}</td>
+      <td class="r num" title="${fxSrc(o)}">${fxOf(o).toFixed(4)}${o.fxMode==="manual"?"<small style=\"color:var(--muted)\"> 手动</small>":""}</td>
+      <td class="r num">${rmb(toRMB(o.price*o.qty,o.currency,fxOf(o)))}</td>
+      <td class="r num ${isS?sign(c.S[o.id].profit):""}">${isS?rmb(c.S[o.id].profit):"—"}</td>
+      ${withActions?`<td class="r"><button class="btn small" data-edit="${x.kind}:${o.id}">修改</button></td>`:""}</tr>`;
+  }).join("");
+  return `<div class="tablewrap"><table><thead><tr><th>日期</th><th>类型</th><th>项目</th><th class="r">数量 × 单价</th><th class="r">汇率</th><th class="r">合计（¥）</th><th class="r">利润</th>${withActions?"<th></th>":""}</tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+function viewRecords(c){
+  const f = ui.recFilter;
+  const recs = allRecords().filter(x=>{ if(!prodById(x.o.productId)) return false;
+    if(f==="buy") return x.kind==="purchases"; if(f==="sell") return x.kind==="sales";
+    if(f==="RM"||f==="RMB") return x.o.currency===f; return true; });
+  const btn=(k,l)=>`<button aria-pressed="${f===k}" data-filter="${k}">${l}</button>`;
+  return `<h1>全部记录</h1><p class="sub">所有买入和卖出，最新的在最上面。点一行可以打开它的项目。</p>
+    <div class="bar"><div class="seg">${btn("all","全部")}${btn("buy","买入")}${btn("sell","卖出")}${btn("RMB","用 RMB")}${btn("RM","用 RM")}</div>
+    <button class="btn" data-act="xlsx" style="margin-left:auto">导出 Excel</button></div>
+    ${recordTable(c, recs, true)}`;
+}
+function viewRates(){
+  const keys = rateKeys.slice().reverse();
+  const st = ui.rateStatus==="updating" ? `<span class="spin"></span>正在更新…`
+    : ui.rateStatus==="fail" ? (window.desktop || !window.claude ? `<span class="loss">这次没能连上汇率服务器</span>，下面是上次保存的数据。` : `<span class="loss">网页版不能联网获取汇率</span>，请用桌面版 exe 自动更新。`)
+    : state.ratesMeta.updated ? `最近更新：${new Date(state.ratesMeta.updated).toLocaleString("zh-CN",{hour12:false})}` : "还没有汇率数据";
+  const shown = ui.rateAll ? keys : keys.slice(0,60);
+  const rows = shown.map((d,i)=>{ const v=state.rates[d], prev=state.rates[keys[i+1]]; const diff = prev ? v-prev : 0;
+    return `<tr><td class="num">${d}</td><td class="r num">${v.toFixed(4)}</td><td class="r num">${(1/v).toFixed(4)}</td>
+      <td class="r num ${diff>0?"gain":diff<0?"loss":""}">${prev?(diff>0?"+":"")+diff.toFixed(4):"—"}</td></tr>`; }).join("");
+  const used = state.purchases.concat(state.sales).filter(o=>o.fxMode!=="manual").length;
+  return `<h1>汇率</h1>
+    <p class="sub">每次打开软件都会自动更新。每笔「自动」记录都按它那一天的汇率换算成人民币；周末和节假日用前一个工作日的汇率。数据来自欧洲央行的每日参考汇率。</p>
+    <div class="bar"><button class="btn primary" data-act="rates" ${ui.rateStatus==="updating"?"disabled":""}>立即更新</button><span style="color:var(--muted);font-size:14px">${st}</span></div>
+    ${keys.length?`<div class="rateline">${rateChart()}</div>`:""}
+    <div class="stats" style="margin-bottom:16px">
+      <div class="stat"><div class="k">最新汇率</div><div class="v">${keys.length?state.rates[keys[0]].toFixed(4):"—"}</div><div class="k">${keys[0]||""}</div></div>
+      <div class="stat"><div class="k">已保存天数</div><div class="v">${keys.length}</div><div class="k">${keys.length?keys[keys.length-1]+" 起":""}</div></div>
+      <div class="stat"><div class="k">按当天汇率计算的记录</div><div class="v">${used}</div><div class="k">手动填写的有 ${state.purchases.length+state.sales.length-used} 条</div></div>
+    </div>
+    <div class="tablewrap">${keys.length?`<table><thead><tr><th>日期</th><th class="r">1 RMB = RM</th><th class="r">1 RM = RMB</th><th class="r">比前一天</th></tr></thead><tbody>${rows}</tbody></table>`
+      :`<div class="empty">还没有汇率数据。请连上网络后点「立即更新」。</div>`}</div>
+    ${keys.length>60&&!ui.rateAll?`<div class="bar" style="margin-top:12px"><button class="btn small" data-act="rateall">显示全部 ${keys.length} 天</button></div>`:""}`;
+}
+function rateChart(){
+  const keys = rateKeys.slice(-180); if(keys.length<2) return "";
+  const vals = keys.map(k=>state.rates[k]); const lo=Math.min(...vals), hi=Math.max(...vals), pad=(hi-lo)*0.15||0.001;
+  const W=600,H=180,L=44,R=8,T=12,Bm=24, x=i=>L+(W-L-R)*i/(keys.length-1), y=v=>T+(H-T-Bm)*(1-(v-(lo-pad))/((hi+pad)-(lo-pad)));
+  const d = vals.map((v,i)=>(i?"L":"M")+x(i).toFixed(1)+" "+y(v).toFixed(1)).join(" ");
+  const ticks=[lo,(lo+hi)/2,hi].map(v=>`<text x="${L-6}" y="${y(v)+4}" text-anchor="end">${v.toFixed(3)}</text><line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-dasharray="3 4"/>`).join("");
+  const lab=[0,Math.floor(keys.length/2),keys.length-1].map(i=>`<text x="${x(i)}" y="${H-6}" text-anchor="${i===0?"start":i===keys.length-1?"end":"middle"}">${keys[i].slice(5)}</text>`).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="最近 ${keys.length} 个工作日的人民币兑马币汇率走势">${ticks}<path d="${d}" fill="none" stroke="var(--my)" stroke-width="2" stroke-linejoin="round"/><circle cx="${x(keys.length-1)}" cy="${y(vals[vals.length-1])}" r="3.5" fill="var(--my)"/>${lab}</svg>`;
+}
+function viewPrefs(){
+  const n = state.purchases.length + state.sales.length;
+  return `<div class="prefs"><h1>备份与设置</h1><p class="sub">${store.mode==="db"?"数据保存在你的 Claude 账户里，换电脑打开这个页面也能看到。":(window.desktop ? "数据保存在这台电脑上。每次修改后，会自动在「文档/两地账本」里存一份 Excel 备份。" : "数据保存在这台电脑的浏览器里。")}建议每个月导出一次 Excel 存在电脑或网盘里。</p>
+   <div class="card"><strong>导出 Excel</strong><p>一个 .xlsx 文件，第一张表「每一笔明细」列出全部 ${n} 笔买卖，每笔一行，包含原币金额、汇率、人民币金额，卖出的还有扣的哪批货、成本和利润。后面还有总览、每月汇总、项目汇总、卖出成本明细、库存明细、汇率表，以及一张恢复用的原始数据表。</p>
+     <button class="btn primary" data-act="xlsx">导出 Excel</button></div>
+   <div class="card"><strong>从 Excel 恢复</strong><p>选择之前从这里导出的 Excel 文件。已有的记录不会重复，只会补上缺少的。</p>
+     <label class="btn" style="display:inline-block">选择 Excel 文件<input type="file" accept=".xlsx" id="restore" hidden></label></div>
+   <div class="card"><strong>备用汇率</strong><p>平时都用「汇率」页里自动更新的当天汇率。只有没联网、又没有那天的数据时，才会用这个备用汇率。</p>
+     <div class="field" style="max-width:260px"><label for="fxDefault">1 RMB 等于多少 RM</label><input id="fxDefault" type="number" step="0.0001" min="0.0001" value="${state.settings.fx}"></div>
+     <button class="btn" data-act="savefx">保存备用汇率</button></div>
+  </div>`;
+}
+
+/* ---------- hero animation ---------- */
+function playHero(){
+  const el = document.getElementById("heroNum"); if(!el) return;
+  if(matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const to = Number(el.dataset.to), trace = document.getElementById("trace"), runner = document.getElementById("runner");
+  const len = trace.getTotalLength(); trace.style.strokeDasharray = len; trace.style.strokeDashoffset = len;
+  const t0 = performance.now(), dur = 1300;
+  (function step(now){
+    const k = Math.min(1,(now-t0)/dur), e = 1-Math.pow(1-k,3);
+    el.textContent = rmb(to*e); trace.style.strokeDashoffset = len*(1-e);
+    const pt = trace.getPointAtLength(len*e); runner.setAttribute("cx",pt.x); runner.setAttribute("cy",pt.y);
+    runner.setAttribute("opacity", k<1?1:0);
+    if(k<1) requestAnimationFrame(step); else el.textContent = rmb(to);
+  })(t0);
+}
+
+/* ---------- forms ---------- */
+const scrim = document.getElementById("scrim"), sheet = document.getElementById("sheet");
+function openSheet(html){ sheet.innerHTML = html; scrim.classList.add("on"); const f=sheet.querySelector("input:not([type=hidden]),select"); if(f) setTimeout(()=>f.focus(),60); }
+function closeSheet(){ scrim.classList.remove("on"); }
+scrim.addEventListener("click", e=>{ if(e.target===scrim) closeSheet(); });
+document.addEventListener("keydown", e=>{ if(e.key==="Escape") closeSheet(); });
+
+function lastCur(pid, kind){
+  const l = state[kind].filter(o=>o.productId===pid).sort(order).pop();
+  return l ? l.currency : null;
+}
+/* mode: "new" (project + first buy), "buy", "sell" */
+function txForm(mode, pid, existing){
+  const isSell = mode==="sell";
+  const p = pid ? prodById(pid) : null;
+  let cur;
+  if(existing) cur = existing.currency;
+  else if(isSell){ cur = lastCur(pid,"sales") || (lastCur(pid,"purchases")==="RM" ? "RMB" : "RM"); }
+  else cur = (pid && lastCur(pid,"purchases")) || state.settings.lastBuyCur || "RMB";
+  const o = existing || { date:today(), qty:1, price:"", fx:state.settings.fx, fxMode:"auto" };
+  const manual = o.fxMode==="manual";
+  const fxShown = manual ? o.fx : (rateFor(o.date) || o.fx || state.settings.fx);
+  const title = existing ? (isSell?"修改卖出":"修改买入") : mode==="new" ? "新建项目" : isSell ? "记一笔卖出" : "再买入";
+  let stockNote = "";
+  if(isSell){ const est = sellEstimate(pid, 0, existing?.id); stockNote = `目前库存 ${est.stock} 件`; }
+  openSheet(`
+    <h3>${title}</h3>
+    <p class="hint">${mode==="new"?"填上商品名称和第一笔买入。还没卖之前，它会一直显示为在库。":`${esc(p.name)}${stockNote?"，"+stockNote:""}`}</p>
+    <form id="txf" novalidate>
+      ${mode==="new"?`<div class="field"><label for="fn">商品名称</label><input id="fn" placeholder="例如：PS5 手柄" autocomplete="off"></div>`:""}
+      <div class="field"><label>${isSell?"卖出用的货币":"买入用的货币"}</label>
+        <div class="seg cur2" id="curSeg"><button type="button" data-cur="RMB" aria-pressed="${cur==="RMB"}">RMB 人民币</button><button type="button" data-cur="RM" aria-pressed="${cur==="RM"}">RM 马币</button></div></div>
+      <div class="row2">
+        <div class="field"><label for="fpr">${isSell?"卖出单价":"买入单价"}</label><div class="unit"><input id="fpr" type="number" min="0" step="0.01" value="${o.price}" placeholder="0.00" inputmode="decimal"><span id="curLbl">${cur}</span></div></div>
+        <div class="field"><label for="fq">数量</label><input id="fq" type="number" min="1" step="1" value="${o.qty}" inputmode="numeric"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label for="fd">日期</label><input id="fd" type="date" value="${o.date}"></div>
+        <div class="field"><label for="ffx">汇率：1 RMB =<span class="chk"><input type="checkbox" id="fman" ${manual?"checked":""}>手动填</span></label>
+          <div class="unit"><input id="ffx" type="number" min="0.0001" step="0.0001" value="${fxShown}" inputmode="decimal" ${manual?"":"disabled"}><span>RM</span></div>
+          <div class="fxnote" id="fxnote"></div></div>
+      </div>
+      <div class="preview" id="pv"></div>
+      <div class="err" id="ferr"></div>
+      <div class="actions">
+        ${existing?`<button type="button" class="btn danger" id="delbtn" style="margin-right:auto">删除这笔</button>`:""}
+        <button type="button" class="btn" data-close>取消</button>
+        <button type="submit" class="btn primary">${existing?"保存修改":mode==="new"?"创建项目":isSell?"记下这笔卖出":"记下这笔买入"}</button>
+      </div>
+    </form>`);
+  const f = document.getElementById("txf");
+  f.dataset.cur = cur;
+  const upd = () => updatePreview(mode, pid, existing);
+  document.getElementById("curSeg").addEventListener("click", e=>{
+    const b = e.target.closest("button[data-cur]"); if(!b) return;
+    f.dataset.cur = b.dataset.cur; document.getElementById("curLbl").textContent = b.dataset.cur;
+    document.querySelectorAll("#curSeg button").forEach(x=>x.setAttribute("aria-pressed", x===b)); upd();
+  });
+  const fxNote = () => {
+    const man = document.getElementById("fman").checked, d = document.getElementById("fd").value, r = rateFor(d);
+    const box = document.getElementById("ffx"); box.disabled = !man;
+    if(!man) box.value = r || state.settings.fx;
+    document.getElementById("fxnote").textContent = man ? "按你填的实际换汇汇率计算" : r ? "自动用这一天的汇率" : "暂无这天的数据，先用备用汇率，联网后自动更新";
+  };
+  f.addEventListener("input", e=>{ if(e.target.id==="fd"||e.target.id==="fman") fxNote(); upd(); });
+  f.addEventListener("change", e=>{ if(e.target.id==="fman"){ fxNote(); upd(); } });
+  fxNote();
+  f.addEventListener("submit", e=>{ e.preventDefault(); submitTx(mode, pid, existing); });
+  const db = document.getElementById("delbtn");
+  if(db) db.addEventListener("click", async ()=>{
+    if(!db.classList.contains("armed")){ db.classList.add("armed"); db.textContent="再点一次确认删除"; setTimeout(()=>{ db.classList.remove("armed"); db.textContent="删除这笔"; },3000); return; }
+    await del(isSell?"sales":"purchases", existing.id); closeSheet(); toast("已删除这笔记录"); render();
+  });
+  upd();
+}
+function readForm(){
+  return { name:(document.getElementById("fn")?.value||"").trim(), cur:document.getElementById("txf").dataset.cur,
+    date:document.getElementById("fd").value, qty:parseInt(document.getElementById("fq").value,10),
+    price:parseFloat(document.getElementById("fpr").value), fx:parseFloat(document.getElementById("ffx").value),
+    fxMode:document.getElementById("fman").checked ? "manual" : "auto" };
+}
+function sellEstimate(pid, qty, excludeId){
+  const batches = state.purchases.filter(b=>b.productId===pid).sort(order).map(b=>({left:b.qty, unit:toRMB(b.price,b.currency,fxOf(b))}));
+  for(const s of state.sales.filter(s=>s.productId===pid && s.id!==excludeId).sort(order)){ let n=s.qty; for(const bt of batches){ if(n<=0)break; const t=Math.min(n,bt.left); bt.left-=t; n-=t; } }
+  const stock = batches.reduce((a,b)=>a+b.left,0); let n=qty, cost=0;
+  for(const bt of batches){ if(n<=0)break; const t=Math.min(n,bt.left); n-=t; cost+=t*bt.unit; }
+  return { stock, cost };
+}
+function updatePreview(mode, pid, existing){
+  const v=readForm(), pv=document.getElementById("pv");
+  if(!(v.qty>0) || isNaN(v.price) || v.price<0 || !(v.fx>0)){ pv.innerHTML = `填好单价、数量和汇率后，这里会显示换算成人民币的结果。`; return; }
+  const total = v.price*v.qty, totalRMB = toRMB(total,v.cur,v.fx);
+  const conv = v.cur==="RMB" ? "" : `，约合 ${rmb(totalRMB)}`;
+  if(mode!=="sell"){
+    pv.innerHTML = `合计 ${money(total,v.cur)}${conv}<br>每件成本 <span class="pv num">${rmb(totalRMB/v.qty)}</span>`;
+  } else {
+    const est = sellEstimate(pid, v.qty, existing?.id), profit = totalRMB - est.cost;
+    pv.innerHTML = `收入 ${money(total,v.cur)}${conv}，成本 ${rmb(est.cost)}<br>这笔${profit>=0?"赚":"亏"} <span class="pv num ${sign(profit)}">${rmb(Math.abs(profit))}</span>${totalRMB>0?`<span style="color:var(--muted)">，利润率 ${Math.round(profit/totalRMB*100)}%</span>`:""}`;
+  }
+}
+async function submitTx(mode, pid, existing){
+  const v = readForm(), err = document.getElementById("ferr");
+  if(mode==="new" && !v.name) return err.textContent = "请填写商品名称。";
+  if(isNaN(v.price) || v.price<0) return err.textContent = "请填写单价。";
+  if(!(v.qty>0)) return err.textContent = "数量要大于 0。";
+  if(!v.date) return err.textContent = "请选择日期。";
+  if(!(v.fx>0)) return err.textContent = "汇率要大于 0。";
+  if(mode==="sell"){ const est = sellEstimate(pid, v.qty, existing?.id); if(v.qty > est.stock) return err.textContent = `库存只有 ${est.stock} 件，卖不了 ${v.qty} 件。`; }
+  if(mode==="new"){ const p={ id:uid(), name:v.name, createdAt:Date.now() }; await put("products", p); pid=p.id; }
+  const rec = { id: existing?.id || uid(), productId:pid, date:v.date, qty:v.qty, price:r2(v.price), currency:v.cur, fx:v.fx, fxMode:v.fxMode, createdAt: existing?.createdAt || Date.now() };
+  const kind = mode==="sell" ? "sales" : "purchases";
+  await put(kind, rec);
+  let dirty=false;
+  if(v.fxMode==="auto" && !rateFor(v.date)) setTimeout(()=>updateRates(false), 300);
+  if(kind==="purchases" && state.settings.lastBuyCur!==v.cur){ state.settings.lastBuyCur=v.cur; dirty=true; }
+  if(dirty) putSettings();
+  closeSheet();
+  const c = compute(), name = prodById(pid)?.name || "";
+  if(mode==="new"){ ui.view="projects"; ui.project=pid; history.replaceState(null,"","#projects"); }
+  ui.fresh = (ui.view==="projects" && !ui.project) ? pid : rec.id;
+  render();
+  if(mode==="sell"){ const pr=c.S[rec.id].profit; toast(`${existing?"已保存":"已卖出"}：${name} ×${rec.qty}，${pr>=0?"赚":"亏"} ${rmb(Math.abs(pr))}`); }
+  else toast(mode==="new" ? `已创建项目：${name}` : existing ? "已保存修改" : `已记下买入：${name} ×${rec.qty}`);
+}
+function renameForm(p){
+  openSheet(`<h3>修改项目名称</h3><form id="rn"><div class="field"><label for="rnv">名称</label><input id="rnv" value="${esc(p.name)}"></div><div class="actions"><button type="button" class="btn" data-close>取消</button><button class="btn primary">保存</button></div></form>`);
+  document.getElementById("rn").addEventListener("submit", async ev=>{ ev.preventDefault(); const n=document.getElementById("rnv").value.trim(); if(!n) return; await put("products",{...p,name:n}); closeSheet(); render(); toast("已改名"); });
+}
+
+/* ---------- Excel export / restore ---------- */
+async function saveFile(filename, data, mime){
+  try{
+    const dl = window.claude && window.claude.use ? await window.claude.use("downloads") : null;
+    if(dl){ await dl.save({ filename, data }); toast("已导出 "+filename); return; }
+  }catch(e){ if(e && e.code==="declined") return; }
+  try{ const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([data],{type:mime})); a.download=filename; a.click(); }catch(e){ toast("这里无法下载文件"); }
+}
+function buildWorkbook(){
+  const c = compute(), t = totals(c);
+  const pct = (a,b) => b ? Math.round(a/b*10000)/10000 : "";
+  const name = id => prodById(id)?.name || "";
+  const overview = [
+    ["两地账本 · 完整导出", ""], ["导出时间", new Date().toLocaleString("zh-CN",{hour12:false})], ["统一货币", "人民币（RMB）"], ["", ""],
+    ["历史累计利润", r2(t.profit)], ["累计卖出收入", r2(t.revenue)], ["利润率", pct(t.profit,t.revenue)],
+    ["中国卖出利润（用 RMB 卖）", r2(t.CN)], ["马来西亚卖出利润（用 RM 卖）", r2(t.MY)], ["本月利润", r2(t.month)],
+    ["还没卖的货（成本）", r2(t.stockCost)], ["在库项目数", t.live], ["项目总数", state.products.length],
+    ["买入记录数", state.purchases.length], ["卖出记录数", state.sales.length],
+    ["最新汇率（1 RMB = RM）", rateKeys.length ? state.rates[rateKeys[rateKeys.length-1]] : ""], ["汇率更新时间", state.ratesMeta.updated ? new Date(state.ratesMeta.updated).toLocaleString("zh-CN",{hour12:false}) : ""],
+    ["备用汇率（1 RMB = RM）", state.settings.fx]
+  ];
+  const mm = {};
+  for(const s of state.sales){ const x=c.S[s.id]; if(!x) continue; const m=s.date.slice(0,7); const o = mm[m] ||= { n:0, qty:0, rev:0, cost:0, CN:0, MY:0 };
+    o.n++; o.qty+=s.qty; o.rev+=x.revenue; o.cost+=x.cost; o[s.currency==="RM"?"MY":"CN"]+=x.profit; }
+  const buyM = {}; for(const b of state.purchases){ const m=b.date.slice(0,7); buyM[m]=(buyM[m]||0)+toRMB(b.price*b.qty,b.currency,fxOf(b)); }
+  const monthsAll = [...new Set(Object.keys(mm).concat(Object.keys(buyM)))].sort();
+  const monthly = [["月份","买入花费（RMB）","卖出笔数","卖出件数","卖出收入（RMB）","卖出部分成本（RMB）","中国卖出利润","马来西亚卖出利润","利润合计","利润率"]];
+  for(const m of monthsAll){ const o=mm[m]||{n:0,qty:0,rev:0,cost:0,CN:0,MY:0}; monthly.push([m, r2(buyM[m]||0), o.n, o.qty, r2(o.rev), r2(o.cost), r2(o.CN), r2(o.MY), r2(o.CN+o.MY), pct(o.CN+o.MY,o.rev)]); }
+  const projects = [["项目","状态","共买（件）","已卖（件）","库存（件）","买入花费（RMB）","平均每件成本（RMB）","卖出收入（RMB）","已卖部分成本（RMB）","利润（RMB）","利润率","还没卖的成本（RMB）","第一次买入","最后一次买卖","创建时间"]];
+  for(const p of state.products){ const r=c.P[p.id]; const ds=state.purchases.filter(b=>b.productId===p.id).map(b=>b.date).sort();
+    projects.push([p.name, r.stock>0?"在库":"已卖完", r.bought, r.sold, r.stock, r2(r.buyCost), r.bought?r2(r.buyCost/r.bought):"", r2(r.revenue), r2(r.cost), r2(r.profit), pct(r.profit,r.revenue), r2(r.stockCost), ds[0]||"", r.lastDate, p.createdAt?new Date(p.createdAt).toLocaleString("zh-CN",{hour12:false}):""]); }
+  const pById = id => state.purchases.find(b=>b.id===id);
+  const records = [["序号","日期","项目","类型","数量","单价（原货币）","货币","合计（原货币）","计算用汇率（1 RMB = RM）","汇率来源","记账时填的汇率","每件（RMB）","合计（RMB）",
+    "【买入】已卖出件数","【买入】还剩件数","【买入】还剩成本（RMB）",
+    "【卖出】扣的是哪天买的","【卖出】对应买入单价","【卖出】每件成本（RMB）","【卖出】成本合计（RMB）","【卖出】利润（RMB）","【卖出】利润率","状态","记录时间"]];
+  let no = 0;
+  for(const x of allRecords().slice().reverse()){ const p=prodById(x.o.productId); if(!p) continue;
+    const o=x.o, isS=x.kind==="sales", tot=toRMB(o.price*o.qty,o.currency,fxOf(o));
+    const head = [++no, o.date, p.name, isS?"卖出":"买入", o.qty, o.price, o.currency, r2(o.price*o.qty), fxOf(o), fxSrc(o), o.fx, r2(tot/o.qty), r2(tot)];
+    const when = o.createdAt?new Date(o.createdAt).toLocaleString("zh-CN",{hour12:false}):"";
+    if(isS){
+      const sx=c.S[o.id], al=sx.alloc;
+      const from = al.map(a=>{ const b=pById(a.purchaseId)||{}; return `${b.date||"?"} ×${a.qty}`; }).join("；") + (sx.short>0?`；库存不足 ×${sx.short}`:"");
+      const bp = al.map(a=>{ const b=pById(a.purchaseId)||{}; return b.price!=null?money(b.price,b.currency):""; }).join("；");
+      records.push(head.concat(["","","", from, bp, o.qty?r2(sx.cost/o.qty):"", r2(sx.cost), r2(sx.profit), pct(sx.profit,sx.revenue), sx.profit>=0?"赚":"亏", when]));
+    } else {
+      const bx=c.B[o.id]||{left:o.qty,unit:tot/o.qty};
+      records.push(head.concat([o.qty-bx.left, bx.left, r2(bx.left*bx.unit), "","","","","","", bx.left>0?(bx.left===o.qty?"未卖出":"部分卖出"):"已卖完", when]));
+    }
+  }
+  const fifo = [["卖出日期","项目","卖出货币","卖出单价","这次卖出件数","扣的是哪天买的","扣了几件","买入单价","买入货币","买入汇率","每件成本（RMB）","这部分成本（RMB）"]];
+  for(const s of state.sales.slice().sort(order)){ const x=c.S[s.id]; if(!x) continue;
+    for(const a of x.alloc){ const b=pById(a.purchaseId)||{}; fifo.push([s.date, name(s.productId), s.currency, s.price, s.qty, b.date||"", a.qty, b.price??"", b.currency||"", b.id?fxOf(b):"", r2(a.unit), r2(a.unit*a.qty)]); }
+    if(x.short>0) fifo.push([s.date, name(s.productId), s.currency, s.price, s.qty, "（库存不足）", x.short, "", "", "", 0, 0]); }
+  const stock = [["项目","买入日期","买入件数","还剩件数","买入单价","货币","汇率","每件成本（RMB）","还剩部分成本（RMB）"]];
+  for(const b of state.purchases.slice().sort(order)){ const x=c.B[b.id]; if(!x||x.left<=0) continue;
+    stock.push([name(b.productId), b.date, b.qty, x.left, b.price, b.currency, fxOf(b), r2(x.unit), r2(x.unit*x.left)]); }
+  const rates = [["日期","1 RMB = RM","1 RM = RMB"]];
+  for(const d of rateKeys) rates.push([d, state.rates[d], Math.round(10000/state.rates[d])/10000]);
+  const raw = [["表","id","项目id","项目名称","日期","数量","单价","货币","汇率","创建时间","汇率方式"]];
+  for(const p of state.products) raw.push(["products", p.id, "", p.name, "", "", "", "", "", p.createdAt||0, ""]);
+  for(const k of ["purchases","sales"]) for(const o of state[k]) raw.push([k, o.id, o.productId, "", o.date, o.qty, o.price, o.currency, o.fx, o.createdAt||0, o.fxMode||"auto"]);
+  const wb = XLSX.utils.book_new();
+  const add = (rows, nm, widths) => { const ws = XLSX.utils.aoa_to_sheet(rows); ws["!cols"] = widths.map(w=>({wch:w})); if(rows.length>1 && rows[0].length>2) ws["!autofilter"]={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:rows.length-1,c:rows[0].length-1}})}; XLSX.utils.book_append_sheet(wb, ws, nm); };
+  add(records, "每一笔明细", [6,12,24,6,6,14,6,14,22,26,14,12,14,14,14,18,30,22,18,18,14,10,10,20]);
+  add(overview, "总览", [30,22]);
+  add(monthly, "每月汇总", [10,16,10,10,16,18,14,16,12,8]);
+  add(projects, "项目汇总", [24,8,10,10,10,16,18,16,18,12,8,18,12,14,20]);
+  add(fifo, "卖出成本明细", [12,24,8,10,12,16,10,10,8,10,14,16]);
+  add(stock, "库存明细", [24,12,10,10,10,6,10,14,18]);
+  add(rates, "汇率表", [12,12,12]);
+  add(raw, "原始数据（恢复用）", [10,38,38,20,12,6,10,6,8,16,8]);
+  return new Uint8Array(XLSX.write(wb, { bookType:"xlsx", type:"array" }));
+}
+function exportXlsx(){
+  if(!window.XLSX) return toast("Excel 组件还没加载好，请稍后再试");
+  saveFile(`两地账本-${today()}.xlsx`, buildWorkbook(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+}
+let backupTimer;
+function scheduleAutoBackup(){
+  if(!window.desktop || !window.XLSX) return;
+  clearTimeout(backupTimer);
+  backupTimer = setTimeout(()=>{ try{ window.desktop.autoBackup(buildWorkbook()); }catch(e){} }, 3000);
+}
+async function restoreXlsx(file){
+  try{
+    if(!window.XLSX) throw 0;
+    const wb = XLSX.read(await file.arrayBuffer(), { type:"array" });
+    const ws = wb.Sheets["原始数据（恢复用）"]; if(!ws) throw 0;
+    const rows = XLSX.utils.sheet_to_json(ws, { header:1 }).slice(1).filter(r=>r && r[0]);
+    let added = 0;
+    for(const r of rows){
+      const [kind,id,pid,name,date,qty,price,cur,fx,created] = r;
+      if(kind==="products"){ if(!prodById(id)){ await put("products",{ id:String(id), name:String(name), createdAt:Number(created)||0 }); } }
+    }
+    for(const r of rows){
+      const [kind,id,pid,name,date,qty,price,cur,fx,created,mode] = r;
+      if((kind==="purchases"||kind==="sales") && !state[kind].some(o=>o.id===id)){
+        await put(kind,{ id:String(id), productId:String(pid), date:String(date), qty:Number(qty), price:Number(price), currency:cur==="RM"?"RM":"RMB", fx:Number(fx), fxMode:mode==="manual"?"manual":"auto", createdAt:Number(created)||0 }); added++;
+      }
+    }
+    const rs = wb.Sheets["汇率表"];
+    if(rs){ let nr=0; for(const r of XLSX.utils.sheet_to_json(rs,{header:1}).slice(1)){ if(r && /^\d{4}-\d{2}-\d{2}$/.test(String(r[0])) && Number(r[1])>0 && !state.rates[r[0]]){ state.rates[String(r[0])]=Number(r[1]); nr++; } } if(nr){ indexRates(); await putRates(); } }
+    toast(added ? `已恢复 ${added} 条记录` : "没有需要恢复的记录，数据都在"); render();
+  }catch(e){ toast("这个文件不是从两地账本导出的 Excel"); }
+}
+
+/* ---------- events ---------- */
+let toastTimer;
+function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("on"); clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove("on"),2600); }
+
+document.addEventListener("click", async e=>{
+  const el = e.target.closest("button,[data-open]"); if(!el || el.closest("#curSeg")) return;
+  if(el.dataset.edit){ const [k,id]=el.dataset.edit.split(":"); const o=state[k].find(x=>x.id===id); if(o) txForm(k==="sales"?"sell":"buy", o.productId, o); return; }
+  if(el.dataset.view) return go(el.dataset.view);
+  if(el.dataset.open) return go("projects", el.dataset.open);
+  if(el.hasAttribute("data-close")) return closeSheet();
+  const a = el.dataset.act;
+  if(a==="newproj") return txForm("new");
+  if(a==="buy"||a==="sell") return txForm(a, el.dataset.pid);
+  if(a==="xlsx") return exportXlsx();
+  if(a==="rates") return updateRates(true);
+  if(a==="rateall"){ ui.rateAll=true; return render(); }
+  if(a==="savefx"){ const v=parseFloat(document.getElementById("fxDefault").value); if(!(v>0)) return toast("汇率要大于 0"); state.settings.fx=v; await putSettings(); render(); return toast(`备用汇率已保存：1 RMB = ${v} RM`); }
+  if(el.dataset.filter){ ui.recFilter=el.dataset.filter; return render(); }
+  if(el.dataset.rename) return renameForm(prodById(el.dataset.rename));
+  if(el.dataset.delprod){ const id=el.dataset.delprod;
+    if(!el.classList.contains("armed")){ el.classList.add("armed"); el.textContent="再点一次：删除项目和它的所有记录"; setTimeout(()=>{ el.classList.remove("armed"); el.textContent="删除项目"; },3000); return; }
+    for(const s of state.sales.filter(x=>x.productId===id)) await del("sales",s.id);
+    for(const b of state.purchases.filter(x=>x.productId===id)) await del("purchases",b.id);
+    await del("products",id); go("projects"); toast("已删除项目和它的所有记录"); return; }
+});
+document.addEventListener("input", e=>{
+  if(e.target.id==="search"){ ui.search=e.target.value; const pos=e.target.selectionStart; render(); const s=document.getElementById("search"); if(s){ s.focus(); s.setSelectionRange(pos,pos); } }
+});
+document.addEventListener("change", e=>{ if(e.target.id==="restore" && e.target.files[0]) restoreXlsx(e.target.files[0]); });
+window.addEventListener("hashchange", ()=>{ const v=location.hash.slice(1); if(VIEWS.includes(v) && v!==ui.view) go(v); });
+
+/* ---------- boot ---------- */
+(async function(){
+  loadLocal(); migrate();
+  const h = location.hash.slice(1);
+  ui.view = VIEWS.includes(h) ? h : "overview";
+  render(true); setStatus();
+  if(await connectDb()){ setStatus(); render(ui.view==="overview"); }
+  updateRates(false);
+})();
+</script>
+</body>
+</html>

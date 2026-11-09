@@ -1,0 +1,27 @@
+{
+  "name": "liangdi-ledger",
+  "productName": "两地账本",
+  "version": "1.1.0",
+  "description": "中国与马来西亚两地买卖的个人记账软件",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "postinstall": "node scripts/copy-vendor.js",
+    "start": "electron .",
+    "dist": "electron-builder --win portable"
+  },
+  "dependencies": {
+    "xlsx": "0.18.5"
+  },
+  "devDependencies": {
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8"
+  },
+  "build": {
+    "appId": "local.liangdi.ledger",
+    "productName": "两地账本",
+    "files": ["main.js", "preload.js", "app/**/*"],
+    "win": { "target": "portable" },
+    "portable": { "artifactName": "两地账本.exe" }
+  }
+}
